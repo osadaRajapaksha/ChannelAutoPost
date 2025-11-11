@@ -34,97 +34,98 @@ threading.Thread(target=run_health_server, daemon=True).start()
 
 
 
-#    This file is part of the ChannelAutoForwarder distribution (https://github.com/xditya/ChannelAutoForwarder).
-#    Copyright (c) 2021-2022 Aditya
-#
-#    This program is free software: you can redistribute it and/or modify
-#    it under the terms of the GNU General Public License as published by
-#    the Free Software Foundation, version 3.
-#
-#    This program is distributed in the hope that it will be useful, but
-#    WITHOUT ANY WARRANTY; without even the implied warranty of
-#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-#    General Public License for more details.
-#
-#    License can be found in < https://github.com/xditya/ChannelAutoForwarder/blob/main/License> .
+# ChannelAutoPost – Modified for 10→10 Mirroring
+# Based on ChannelAutoForwarder by @xditya
+# Edited for 1-to-1 channel mirroring (fresh repost, not forward)
 
 import logging
 from telethon import TelegramClient, events, Button
 from decouple import config
 
+# Logging setup
 logging.basicConfig(
-    level=logging.INFO, format="[%(levelname)s] %(asctime)s - %(message)s"
+    level=logging.INFO,
+    format="[%(levelname)s] %(asctime)s - %(message)s"
 )
 log = logging.getLogger("ChannelAutoPost")
 
-# start the bot
-log.info("Starting...")
+log.info("Starting Channel AutoPost Bot (1→1 mirror mode)...")
+
+# Telegram credentials from .env
 try:
     apiid = config("APP_ID", cast=int)
     apihash = config("API_HASH")
     bottoken = config("BOT_TOKEN")
-    frm = config("FROM_CHANNEL", cast=lambda x: [int(_) for _ in x.split(" ")])
-    tochnls = config("TO_CHANNEL", cast=lambda x: [int(_) for _ in x.split(" ")])
     datgbot = TelegramClient(None, apiid, apihash).start(bot_token=bottoken)
 except Exception as exc:
-    log.error("Environment vars are missing! Kindly recheck.")
-    log.info("Bot is quiting...")
+    log.error("Environment vars missing or invalid!")
     log.error(exc)
     exit()
 
+# -------------- YOUR 10→10 CHANNEL MAPPING HERE -----------------
+# Example format:
+CHANNEL_PAIRS = {
+    -1002867578605: -1002815938247,
+    
+}
+# ---------------------------------------------------------------
 
+# /start command
 @datgbot.on(events.NewMessage(pattern="/start"))
-async def _(event):
+async def start(event):
     await event.reply(
-        f"Hi `{event.sender.first_name}`!\n\nI am a channel auto-post bot!! Read /help to know more!\n\nI can be used in only two channels (one user) at a time. Kindly deploy your own bot.\n\n[More bots](https://t.me/its_xditya)..",
+        f"Hi `{event.sender.first_name}`!\n\n"
+        f"I’m a channel auto-post bot running in 1→1 mirror mode.\n"
+        f"Messages from 10 source channels will be sent freshly to 10 targets.\n\n"
+        f"Use /help for more info.",
         buttons=[
             Button.url("Repo", url="https://github.com/xditya/ChannelAutoForwarder"),
-            Button.url("Dev", url="https://xditya.me"),
+            Button.url("Developer", url="https://xditya.me"),
         ],
         link_preview=False,
     )
 
-
+# /help command
 @datgbot.on(events.NewMessage(pattern="/help"))
-async def helpp(event):
+async def help_cmd(event):
     await event.reply(
-        "**Help**\n\nThis bot will send all new posts in one channel to the other channel. (without forwarded tag)!\nIt can be used only in two channels at a time, so kindly deploy your own bot from [here](https://github.com/xditya/ChannelAutoForwarder).\n\nAdd me to both the channels and make me an admin in both, and all new messages would be autoposted on the linked channel!!\n\nLiked the bot? Drop a ♥ to @xditya_Bot :)"
+        "**Help — 1→1 Channel Mirroring Bot**\n\n"
+        "This bot listens to multiple source channels and sends their posts freshly to corresponding target channels.\n\n"
+        "Example mapping:\n"
+        "`src1 → dest1`, `src2 → dest2`, etc.\n\n"
+        "No 'forwarded from' tag — posts look original.\n\n"
+        "Make sure the bot is an **admin in both source and target channels.**"
     )
 
+# Main handler for new messages
+@datgbot.on(events.NewMessage(incoming=True, chats=list(CHANNEL_PAIRS.keys())))
+async def mirror_message(event):
+    src = event.chat_id
+    dest = CHANNEL_PAIRS.get(src)
+    if not dest:
+        return
 
-@datgbot.on(events.NewMessage(incoming=True, chats=frm))
-async def _(event):
-    for tochnl in tochnls:
-        try:
-            if event.poll:
-                return
-            if event.photo:
-                photo = event.media.photo
-                await datgbot.send_file(
-                    tochnl, photo, caption=event.text, link_preview=False
-                )
-            elif event.media:
-                try:
-                    if event.media.webpage:
-                        await datgbot.send_message(
-                            tochnl, event.text, link_preview=False
-                        )
-                except Exception:
-                    media = event.media.document
-                    await datgbot.send_file(
-                        tochnl, media, caption=event.text, link_preview=False
-                    )
-                finally:
-                    return
-            else:
-                await datgbot.send_message(tochnl, event.text, link_preview=False)
-        except Exception as exc:
-            log.error(
-                "TO_CHANNEL ID is wrong or I can't send messages there (make me admin).\nTraceback:\n%s",
-                exc,
-            )
+    try:
+        # Skip unsupported content
+        if event.poll:
+            log.info(f"Skipping poll message in {src}")
+            return
 
+        # Handle different message types
+        if event.photo:
+            await datgbot.send_file(dest, event.media.photo, caption=event.text or "", link_preview=False)
+        elif event.media:
+            await datgbot.send_file(dest, event.media, caption=event.text or "")
+        elif event.text:
+            await datgbot.send_message(dest, event.text)
+        else:
+            log.info(f"Unhandled message type from {src}")
 
-log.info("Bot has started.")
-log.info("Do visit https://xditya.me !")
+        log.info(f"✅ Mirrored message from {src} → {dest}")
+
+    except Exception as e:
+        log.error(f"❌ Failed to mirror message from {src} → {dest}: {e}")
+
+log.info("Bot is now running. Listening for new messages...")
 datgbot.run_until_disconnected()
+
