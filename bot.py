@@ -65,7 +65,7 @@ except Exception as exc:
 # -------------- YOUR 10→10 CHANNEL MAPPING HERE -----------------
 # Example format:
 CHANNEL_PAIRS = {
-    -1002867578605: -1002815938247 -1002572158430,
+    -1002867578605: [-1002815938247, -1002572158430],
     -1002823841610: -1002411969209,
     
 }
@@ -98,34 +98,46 @@ async def help_cmd(event):
         "Make sure the bot is an **admin in both source and target channels.**"
     )
 
+
+
+
+
 # Main handler for new messages
 @datgbot.on(events.NewMessage(incoming=True, chats=list(CHANNEL_PAIRS.keys())))
 async def mirror_message(event):
     src = event.chat_id
-    dest = CHANNEL_PAIRS.get(src)
-    if not dest:
+    dests = CHANNEL_PAIRS.get(src)
+    if not dests:
         return
 
-    try:
-        # Skip unsupported content
-        if event.poll:
-            log.info(f"Skipping poll message in {src}")
-            return
+    # Normalize targets: accept string, single ID, or list
+    if isinstance(dests, str):
+        dests = [int(x) for x in dests.split()]
+    elif isinstance(dests, int):
+        dests = [dests]
 
-        # Handle different message types
-        if event.photo:
-            await datgbot.send_file(dest, event.media.photo, caption=event.text or "", link_preview=False)
-        elif event.media:
-            await datgbot.send_file(dest, event.media, caption=event.text or "")
-        elif event.text:
-            await datgbot.send_message(dest, event.text)
-        else:
-            log.info(f"Unhandled message type from {src}")
+    for dest in dests:
+        try:
+            if event.poll:
+                log.info(f"Skipping poll message in {src}")
+                continue
 
-        log.info(f"✅ Mirrored message from {src} → {dest}")
+            # Handle different message types
+            if event.photo:
+                await datgbot.send_file(dest, event.media.photo, caption=event.text or "", link_preview=False)
+            elif event.media:
+                await datgbot.send_file(dest, event.media, caption=event.text or "")
+            elif event.text:
+                await datgbot.send_message(dest, event.text)
+            else:
+                log.info(f"Unhandled message type from {src}")
 
-    except Exception as e:
-        log.error(f"❌ Failed to mirror message from {src} → {dest}: {e}")
+            log.info(f"✅ Mirrored message from {src} → {dest}")
+
+        except Exception as e:
+            log.error(f"❌ Failed to mirror message from {src} → {dest}: {e}")
+
+
 
 log.info("Bot is now running. Listening for new messages...")
 datgbot.run_until_disconnected()
