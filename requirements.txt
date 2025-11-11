@@ -1,3 +1,6 @@
 python-decouple
 telethon
 flask
+pyrogram
+tgcrypto
+
