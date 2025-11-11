@@ -9,11 +9,10 @@ def health():
     return 'OK', 200
 
 def run_health_server():
-    port = int(os.environ.get('PORT', 8080))
+    port = int(os.environ.get("PORT", 8080))
     print(f"✅ Dummy health server running on port {port}")
-    app.run(host='0.0.0.0', port=port, threaded=True)
+    app.run(host="0.0.0.0", port=port, threaded=True)
 
-# Start the dummy server in a background thread
 threading.Thread(target=run_health_server, daemon=True).start()
 
 
