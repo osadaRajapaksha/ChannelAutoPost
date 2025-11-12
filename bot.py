@@ -106,11 +106,14 @@ async def help_cmd(event):
 
 
 import asyncio
-import random  # <-- add this at the top if not already
+import random
 
-# Main handler for new messages
 @datgbot.on(events.NewMessage(incoming=True, chats=list(CHANNEL_PAIRS.keys())))
 async def mirror_message(event):
+    # Skip messages sent by the bot itself
+    if event.out or event.message.out:
+        return
+
     src = event.chat_id
     dests = CHANNEL_PAIRS.get(src)
     if not dests:
@@ -134,7 +137,11 @@ async def mirror_message(event):
             elif event.media:
                 await datgbot.send_file(dest, event.media, caption=event.text or "")
             elif event.text:
-                await datgbot.send_message(dest, event.text)
+                await datgbot.send_message(
+                    dest,
+                    event.text,
+                    formatting_entities=event.message.entities
+                )
             else:
                 log.info(f"Unhandled message type from {src}")
 
@@ -142,12 +149,13 @@ async def mirror_message(event):
 
             # Random delay between 5–10 seconds + jitter (±0.5s)
             delay = random.uniform(15, 25) + random.uniform(-0.51, 0.56)
-            delay = max(0, delay)  # ensure no negative delay
+            delay = max(0, delay)
             log.info(f"⏳ Waiting {delay:.2f}s before next send...")
             await asyncio.sleep(delay)
 
         except Exception as e:
             log.error(f"❌ Failed to mirror message from {src} → {dest}: {e}")
+
 
 
 
