@@ -104,7 +104,6 @@ async def help_cmd(event):
 
 
 
-
 import asyncio
 import random
 
@@ -131,15 +130,15 @@ async def mirror_message(event):
                 log.info(f"Skipping poll message in {src}")
                 continue
 
-            # Handle different message types
             if event.photo:
                 await datgbot.send_file(dest, event.media.photo, caption=event.text or "", link_preview=False)
             elif event.media:
                 await datgbot.send_file(dest, event.media, caption=event.text or "")
             elif event.text:
+                raw_text = event.raw_text  # preserves quotes, spacing, symbols
                 await datgbot.send_message(
                     dest,
-                    event.text,
+                    raw_text,
                     formatting_entities=event.message.entities
                 )
             else:
@@ -147,7 +146,7 @@ async def mirror_message(event):
 
             log.info(f"✅ Mirrored message from {src} → {dest}")
 
-            # Random delay between 5–10 seconds + jitter (±0.5s)
+            # Random delay 5–10s with jitter
             delay = random.uniform(15, 25) + random.uniform(-0.51, 0.56)
             delay = max(0, delay)
             log.info(f"⏳ Waiting {delay:.2f}s before next send...")
@@ -155,6 +154,7 @@ async def mirror_message(event):
 
         except Exception as e:
             log.error(f"❌ Failed to mirror message from {src} → {dest}: {e}")
+
 
 
 
