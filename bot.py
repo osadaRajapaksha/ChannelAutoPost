@@ -141,7 +141,7 @@ async def mirror_message(event):
             log.info(f"✅ Mirrored message from {src} → {dest}")
 
             # Random delay between 5–10 seconds + jitter (±0.5s)
-            delay = random.uniform(5, 10) + random.uniform(-0.51, 0.56)
+            delay = random.uniform(15, 25) + random.uniform(-0.51, 0.56)
             delay = max(0, delay)  # ensure no negative delay
             log.info(f"⏳ Waiting {delay:.2f}s before next send...")
             await asyncio.sleep(delay)
