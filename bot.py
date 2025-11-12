@@ -102,6 +102,9 @@ async def help_cmd(event):
 
 
 
+import asyncio
+import random  # <-- add this at the top if not already
+
 # Main handler for new messages
 @datgbot.on(events.NewMessage(incoming=True, chats=list(CHANNEL_PAIRS.keys())))
 async def mirror_message(event):
@@ -134,8 +137,15 @@ async def mirror_message(event):
 
             log.info(f"✅ Mirrored message from {src} → {dest}")
 
+            # Random delay between 5–10 seconds + jitter (±0.5s)
+            delay = random.uniform(5, 10) + random.uniform(-0.5, 0.5)
+            delay = max(0, delay)  # ensure no negative delay
+            log.info(f"⏳ Waiting {delay:.2f}s before next send...")
+            await asyncio.sleep(delay)
+
         except Exception as e:
             log.error(f"❌ Failed to mirror message from {src} → {dest}: {e}")
+
 
 
 
