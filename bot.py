@@ -113,6 +113,8 @@ async def help_cmd(event):
 
 import asyncio
 import random
+
+
 @datgbot.on(events.NewMessage(incoming=True, chats=list(CHANNEL_PAIRS.keys())))
 async def mirror_message(event):
     # Skip messages sent by this bot
@@ -136,21 +138,20 @@ async def mirror_message(event):
                 log.info(f"Skipping poll message in {src}")
                 continue
 
-            # --- Handle all message types while preserving formatting ---
-            if event.media:  # Photo, document, video, etc.
+            # --- Handle text/media while preserving Telegram entities ---
+            if event.media:  # photo, video, etc.
                 await datgbot.send_file(
                     dest,
                     event.media,
-                    caption=event.text or "",
-                    formatting_entities=event.message.entities,
+                    caption=event.message.message or "",
+                    entities=event.message.entities,
                     link_preview=False
                 )
             elif event.text:
-                # Preserve all formatting — bold, italics, quotes, spoilers, etc.
                 await datgbot.send_message(
                     dest,
-                    event.raw_text,
-                    formatting_entities=event.message.entities,
+                    event.message.message,
+                    entities=event.message.entities,
                     link_preview=False
                 )
             else:
@@ -159,7 +160,7 @@ async def mirror_message(event):
 
             log.info(f"✅ Mirrored message from {src} → {dest}")
 
-            # Random delay (5–10 s with jitter)
+            # Random delay (5–10 s + jitter)
             delay = random.uniform(5, 10) + random.uniform(-0.4, 0.4)
             delay = max(0, delay)
             log.info(f"⏳ Waiting {delay:.2f}s before next send...")
@@ -167,6 +168,7 @@ async def mirror_message(event):
 
         except Exception as e:
             log.error(f"❌ Failed to mirror message from {src} → {dest}: {e}")
+
 
 
 
