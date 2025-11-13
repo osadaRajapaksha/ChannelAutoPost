@@ -116,9 +116,9 @@ import random
 
 
 
-from telethon.tl.types import Message
+from telethon import events
 
-@datgbot.on(events.NewMessage(incoming=True, chats=list(CHANNEL_PAIRS.keys())))
+@dgbot.on(events.NewMessage(incoming=True, chats=list(CHANNEL_PAIRS.keys())))
 async def mirror_message(event):
     if event.out or event.message.out:
         return
@@ -128,14 +128,14 @@ async def mirror_message(event):
     if not dests:
         return
 
-    # Normalize
+    # Normalize destination(s)
     if isinstance(dests, str):
         dests = [int(x) for x in dests.split()]
     elif isinstance(dests, int):
         dests = [dests]
 
     try:
-        msg: Message = await datgbot.get_messages(src, ids=event.id)
+        msg = await dgbot.get_messages(src, ids=event.id)
         if isinstance(msg, (list, tuple)):
             msg = msg[0] if msg else None
         if not msg:
@@ -144,41 +144,40 @@ async def mirror_message(event):
         log.error(f"Failed to fetch message {event.id}: {e}")
         return
 
-    # Convert to MarkdownV2 safe text (bold, italic, code, etc. preserved)
-    try:
-        formatted_text = msg.text or msg.message or ""
-        # Escape MarkdownV2 control characters
-        safe_text = formatted_text.replace("_", "\\_").replace("*", "\\*") \
-            .replace("[", "\\[").replace("`", "\\`").replace("~", "\\~") \
-            .replace(">", "\\>").replace("#", "\\#").replace("+", "\\+") \
-            .replace("-", "\\-").replace("=", "\\=").replace("|", "\\|") \
-            .replace("{", "\\{").replace("}", "\\}").replace(".", "\\.") \
-            .replace("!", "\\!")
-    except Exception:
-        safe_text = msg.message or ""
+    # Get message text safely
+    formatted_text = msg.text or msg.message or ""
+
+    # Escape Markdown symbols
+    def escape_markdown(text):
+        for ch in ('*', '_', '`', '[', ']', '~', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!', '\\'):
+            text = text.replace(ch, f"\\{ch}")
+        return text
+
+    safe_text = escape_markdown(formatted_text)
 
     for dest in dests:
         try:
             if msg.media:
-                await datgbot.send_file(
+                await dgbot.send_file(
                     dest,
                     msg.media,
                     caption=safe_text,
-                    parse_mode="MarkdownV2",
+                    parse_mode="markdown",
                     link_preview=False
                 )
             elif safe_text:
-                await datgbot.send_message(
+                await dgbot.send_message(
                     dest,
                     safe_text,
-                    parse_mode="MarkdownV2",
+                    parse_mode="markdown",
                     link_preview=False
                 )
 
             log.info(f"✅ Mirrored message {msg.id} from {src} → {dest}")
-            await asyncio.sleep(random.uniform(5, 10))
+            await asyncio.sleep(random.uniform(5, 10) + random.uniform(0, 1))  # adds jitter
         except Exception as e:
             log.error(f"❌ Failed to mirror message {msg.id} from {src} → {dest}: {e}")
+
 
 
 
