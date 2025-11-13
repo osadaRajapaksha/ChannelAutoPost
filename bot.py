@@ -132,26 +132,33 @@ async def mirror_message(event):
     elif isinstance(dests, int):
         dests = [dests]
 
+    # ✅ Fetch full message to ensure entities (bold, italic, quote, spoiler) are loaded
+    try:
+        full_msg = await datgbot.get_messages(src, ids=event.id)
+    except Exception as e:
+        log.error(f"Could not fetch full message from {src}: {e}")
+        return
+
     for dest in dests:
         try:
-            if event.poll:
+            if full_msg.poll:
                 log.info(f"Skipping poll message in {src}")
                 continue
 
-            # --- Handle text/media while preserving Telegram entities ---
-            if event.media:  # photo, video, etc.
+            # --- Handle text/media while preserving Telegram formatting ---
+            if full_msg.media:  # photo, video, etc.
                 await datgbot.send_file(
                     dest,
-                    event.media,
-                    caption=event.message.message or "",
-                    entities=event.message.entities,
+                    full_msg.media,
+                    caption=full_msg.message or "",
+                    entities=full_msg.entities,
                     link_preview=False
                 )
-            elif event.text:
+            elif full_msg.message:
                 await datgbot.send_message(
                     dest,
-                    event.message.message,
-                    entities=event.message.entities,
+                    full_msg.message,
+                    entities=full_msg.entities,
                     link_preview=False
                 )
             else:
@@ -168,6 +175,7 @@ async def mirror_message(event):
 
         except Exception as e:
             log.error(f"❌ Failed to mirror message from {src} → {dest}: {e}")
+
 
 
 
