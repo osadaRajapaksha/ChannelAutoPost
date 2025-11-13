@@ -114,12 +114,9 @@ async def help_cmd(event):
 import asyncio
 import random
 
-
-
-from telethon import events
-
-@dgbot.on(events.NewMessage(incoming=True, chats=list(CHANNEL_PAIRS.keys())))
+@datgbot.on(events.NewMessage(incoming=True, chats=list(CHANNEL_PAIRS.keys())))
 async def mirror_message(event):
+    # Skip messages sent by this bot
     if event.out or event.message.out:
         return
 
@@ -128,55 +125,63 @@ async def mirror_message(event):
     if not dests:
         return
 
-    # Normalize destination(s)
+    # Support one→many (space-separated IDs)
     if isinstance(dests, str):
         dests = [int(x) for x in dests.split()]
     elif isinstance(dests, int):
         dests = [dests]
 
-    try:
-        msg = await dgbot.get_messages(src, ids=event.id)
-        if isinstance(msg, (list, tuple)):
-            msg = msg[0] if msg else None
-        if not msg:
-            return
-    except Exception as e:
-        log.error(f"Failed to fetch message {event.id}: {e}")
-        return
-
-    # Get message text safely
-    formatted_text = msg.text or msg.message or ""
-
-    # Escape Markdown symbols
-    def escape_markdown(text):
-        for ch in ('*', '_', '`', '[', ']', '~', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!', '\\'):
-            text = text.replace(ch, f"\\{ch}")
-        return text
-
-    safe_text = escape_markdown(formatted_text)
-
     for dest in dests:
         try:
-            if msg.media:
-                await dgbot.send_file(
+            if event.poll:
+                log.info(f"Skipping poll message in {src}")
+                continue
+
+            # --- Handle all message types while preserving formatting ---
+            if event.media:  # Photo, document, video, etc.
+                await datgbot.send_file(
                     dest,
-                    msg.media,
-                    caption=safe_text,
-                    parse_mode="markdown",
-                    link_preview=False
-                )
-            elif safe_text:
-                await dgbot.send_message(
-                    dest,
-                    safe_text,
-                    parse_mode="markdown",
+                    event.media,
+                    caption=event.text or "",
+                    formatting_entities=event.message.entities,
                     link_preview=False
                 )
 
-            log.info(f"✅ Mirrored message {msg.id} from {src} → {dest}")
-            await asyncio.sleep(random.uniform(5, 10) + random.uniform(0, 1))  # adds jitter
+            elif event.text:
+                raw = event.raw_text
+
+                if event.message.entities:
+                    # Entities available: reuse them (keeps quotes, spoilers, etc.)
+                    await datgbot.send_message(
+                        dest,
+                        raw,
+                        formatting_entities=event.message.entities,
+                        link_preview=False
+                    )
+                else:
+                    # No entities: fallback to Markdown parsing for **bold**, _italic_, etc.
+                    await datgbot.send_message(
+                        dest,
+                        raw,
+                        parse_mode="markdown",
+                        link_preview=False
+                    )
+
+            else:
+                log.info(f"Unhandled message type from {src}")
+                continue
+
+            log.info(f"✅ Mirrored message from {src} → {dest}")
+
+            # Random delay (5–10 s with jitter)
+            delay = random.uniform(5, 10) + random.uniform(-0.4, 0.4)
+            delay = max(0, delay)
+            log.info(f"⏳ Waiting {delay:.2f}s before next send...")
+            await asyncio.sleep(delay)
+
         except Exception as e:
-            log.error(f"❌ Failed to mirror message {msg.id} from {src} → {dest}: {e}")
+            log.error(f"❌ Failed to mirror message from {src} → {dest}: {e}")
+
 
 
 
