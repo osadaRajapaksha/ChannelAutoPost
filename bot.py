@@ -116,9 +116,10 @@ import random
 
 
 
+from telethon.tl.types import Message
+
 @datgbot.on(events.NewMessage(incoming=True, chats=list(CHANNEL_PAIRS.keys())))
 async def mirror_message(event):
-    # Skip messages sent by this bot
     if event.out or event.message.out:
         return
 
@@ -127,77 +128,58 @@ async def mirror_message(event):
     if not dests:
         return
 
-    # Normalize destinations
+    # Normalize
     if isinstance(dests, str):
         dests = [int(x) for x in dests.split()]
     elif isinstance(dests, int):
         dests = [dests]
 
-    # Fetch the full message object from Telegram to ensure entities are present
     try:
-        full_msg = await datgbot.get_messages(src, ids=event.id)
-        # get_messages may return None or a list; ensure single Message object
-        if isinstance(full_msg, (list, tuple)):
-            full_msg = full_msg[0] if full_msg else None
-        if full_msg is None:
-            log.warning(f"Could not fetch full message for id {event.id} from {src}")
+        msg: Message = await datgbot.get_messages(src, ids=event.id)
+        if isinstance(msg, (list, tuple)):
+            msg = msg[0] if msg else None
+        if not msg:
             return
     except Exception as e:
-        log.error(f"Error fetching full message id={event.id} from {src}: {e}")
+        log.error(f"Failed to fetch message {event.id}: {e}")
         return
 
-    # Debug: print message + entities so we can inspect what Telegram returned
+    # Convert to MarkdownV2 safe text (bold, italic, code, etc. preserved)
     try:
-        ent_info = [(type(x).__name__, getattr(x, 'offset', None), getattr(x, 'length', None))
-                    for x in getattr(full_msg, 'entities', [])]
-        log.debug(f"Full message fetched: id={full_msg.id}, text={repr(full_msg.message)}, entities={ent_info}")
+        formatted_text = msg.text or msg.message or ""
+        # Escape MarkdownV2 control characters
+        safe_text = formatted_text.replace("_", "\\_").replace("*", "\\*") \
+            .replace("[", "\\[").replace("`", "\\`").replace("~", "\\~") \
+            .replace(">", "\\>").replace("#", "\\#").replace("+", "\\+") \
+            .replace("-", "\\-").replace("=", "\\=").replace("|", "\\|") \
+            .replace("{", "\\{").replace("}", "\\}").replace(".", "\\.") \
+            .replace("!", "\\!")
     except Exception:
-        log.debug("Full message fetched but failed to read entities for debug.")
+        safe_text = msg.message or ""
 
     for dest in dests:
         try:
-            # Skip polls
-            if getattr(full_msg, 'poll', None):
-                log.info(f"Skipping poll message id={full_msg.id} in {src}")
-                continue
-
-            # If there's media (photo/video/doc/etc.), include caption+entities
-            if getattr(full_msg, 'media', None):
-                caption = full_msg.message or ""  # caption or empty
-                entities = getattr(full_msg, "entities", None)
-                # send_file accepts entities (not formatting_entities) for caption
+            if msg.media:
                 await datgbot.send_file(
                     dest,
-                    full_msg.media,
-                    caption=caption,
-                    entities=entities,
+                    msg.media,
+                    caption=safe_text,
+                    parse_mode="MarkdownV2",
                     link_preview=False
                 )
-
-            # Plain text message
-            elif full_msg.message:
-                # Use .message and .entities (these are raw Telegram fields)
+            elif safe_text:
                 await datgbot.send_message(
                     dest,
-                    full_msg.message,
-                    entities=getattr(full_msg, "entities", None),
+                    safe_text,
+                    parse_mode="MarkdownV2",
                     link_preview=False
                 )
 
-            else:
-                log.info(f"Unhandled message type id={full_msg.id} from {src}")
-                continue
-
-            log.info(f"✅ Mirrored message id={full_msg.id} from {src} → {dest}")
-
-            # Random 5–10 s delay + small jitter
-            delay = random.uniform(5, 10) + random.uniform(-0.4, 0.4)
-            delay = max(0, delay)
-            log.info(f"⏳ Waiting {delay:.2f}s before next send...")
-            await asyncio.sleep(delay)
-
+            log.info(f"✅ Mirrored message {msg.id} from {src} → {dest}")
+            await asyncio.sleep(random.uniform(5, 10))
         except Exception as e:
-            log.error(f"❌ Failed to mirror message id={full_msg.id} from {src} → {dest}: {e}")
+            log.error(f"❌ Failed to mirror message {msg.id} from {src} → {dest}: {e}")
+
 
 
 
