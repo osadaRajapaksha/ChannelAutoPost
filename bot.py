@@ -151,7 +151,7 @@ async def mirror_message(event):
                 raw = event.raw_text
 
                 if event.message.entities:
-                    # Entities available: reuse them (keeps quotes, spoilers, etc.)
+                    # Entities available: reuse them (preserves quotes, spoilers, bold, etc.)
                     await datgbot.send_message(
                         dest,
                         raw,
@@ -163,7 +163,7 @@ async def mirror_message(event):
                     await datgbot.send_message(
                         dest,
                         raw,
-                        parse_mode="markdown",
+                        parse_mode="Markdown",  # <- fixed here
                         link_preview=False
                     )
 
@@ -181,6 +181,7 @@ async def mirror_message(event):
 
         except Exception as e:
             log.error(f"❌ Failed to mirror message from {src} → {dest}: {e}")
+
 
 
 
