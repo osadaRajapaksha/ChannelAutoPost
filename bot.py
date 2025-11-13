@@ -116,6 +116,7 @@ import random
 
 
 
+
 @datgbot.on(events.NewMessage(incoming=True, chats=list(CHANNEL_PAIRS.keys())))
 async def mirror_message(event):
     # Skip messages sent by the bot itself
@@ -163,6 +164,7 @@ async def mirror_message(event):
 
         except Exception as e:
             log.error(f"❌ Failed to mirror message from {src} → {dest}: {e}")
+
 
 
 
