@@ -114,9 +114,11 @@ async def help_cmd(event):
 import asyncio
 import random
 
+
+
 @datgbot.on(events.NewMessage(incoming=True, chats=list(CHANNEL_PAIRS.keys())))
 async def mirror_message(event):
-    # Skip messages sent by this bot
+    # Skip messages sent by the bot itself
     if event.out or event.message.out:
         return
 
@@ -125,7 +127,7 @@ async def mirror_message(event):
     if not dests:
         return
 
-    # Support one→many (space-separated IDs)
+    # Normalize targets: accept string, single ID, or list
     if isinstance(dests, str):
         dests = [int(x) for x in dests.split()]
     elif isinstance(dests, int):
@@ -137,50 +139,31 @@ async def mirror_message(event):
                 log.info(f"Skipping poll message in {src}")
                 continue
 
-            # --- Handle all message types while preserving formatting ---
-            if event.media:  # Photo, document, video, etc.
-                await datgbot.send_file(
-                    dest,
-                    event.media,
-                    caption=event.text or "",
-                    formatting_entities=event.message.entities,
-                    link_preview=False
-                )
-
+            # Handle different message types
+            if event.photo:
+                await datgbot.send_file(dest, event.media.photo, caption=event.text or "", link_preview=False)
+            elif event.media:
+                await datgbot.send_file(dest, event.media, caption=event.text or "")
             elif event.text:
-                raw = event.raw_text
-
-                if event.message.entities:
-                    # Entities available: reuse them (preserves quotes, spoilers, bold, etc.)
-                    await datgbot.send_message(
-                        dest,
-                        raw,
-                        formatting_entities=event.message.entities,
-                        link_preview=False
-                    )
-                else:
-                    # No entities: fallback to Markdown parsing for **bold**, _italic_, etc.
-                    await datgbot.send_message(
-                        dest,
-                        raw,
-                        parse_mode="Markdown",  # <- fixed here
-                        link_preview=False
-                    )
-
+                await datgbot.send_message(
+                    dest,
+                    event.text,
+                    formatting_entities=event.message.entities
+                )
             else:
                 log.info(f"Unhandled message type from {src}")
-                continue
 
             log.info(f"✅ Mirrored message from {src} → {dest}")
 
-            # Random delay (5–10 s with jitter)
-            delay = random.uniform(5, 10) + random.uniform(-0.4, 0.4)
+            # Random delay between 5–10 seconds + jitter (±0.5s)
+            delay = random.uniform(5, 10) + random.uniform(-0.5, 0.5)
             delay = max(0, delay)
             log.info(f"⏳ Waiting {delay:.2f}s before next send...")
             await asyncio.sleep(delay)
 
         except Exception as e:
             log.error(f"❌ Failed to mirror message from {src} → {dest}: {e}")
+
 
 
 
