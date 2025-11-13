@@ -113,10 +113,9 @@ async def help_cmd(event):
 
 import asyncio
 import random
-
 @datgbot.on(events.NewMessage(incoming=True, chats=list(CHANNEL_PAIRS.keys())))
 async def mirror_message(event):
-    # Skip messages sent by the bot itself
+    # Skip messages sent by this bot
     if event.out or event.message.out:
         return
 
@@ -125,7 +124,7 @@ async def mirror_message(event):
     if not dests:
         return
 
-    # Normalize targets: accept string, single ID, or list
+    # Support one→many (space-separated IDs)
     if isinstance(dests, str):
         dests = [int(x) for x in dests.split()]
     elif isinstance(dests, int):
@@ -137,30 +136,38 @@ async def mirror_message(event):
                 log.info(f"Skipping poll message in {src}")
                 continue
 
-            if event.photo:
-                await datgbot.send_file(dest, event.media.photo, caption=event.text or "", link_preview=False)
-            elif event.media:
-                await datgbot.send_file(dest, event.media, caption=event.text or "")
+            # --- Handle all message types while preserving formatting ---
+            if event.media:  # Photo, document, video, etc.
+                await datgbot.send_file(
+                    dest,
+                    event.media,
+                    caption=event.text or "",
+                    formatting_entities=event.message.entities,
+                    link_preview=False
+                )
             elif event.text:
-                raw_text = event.raw_text  # preserves quotes, spacing, symbols
+                # Preserve all formatting — bold, italics, quotes, spoilers, etc.
                 await datgbot.send_message(
                     dest,
-                    raw_text,
-                    formatting_entities=event.message.entities
+                    event.raw_text,
+                    formatting_entities=event.message.entities,
+                    link_preview=False
                 )
             else:
                 log.info(f"Unhandled message type from {src}")
+                continue
 
             log.info(f"✅ Mirrored message from {src} → {dest}")
 
-            # Random delay 5–10s with jitter
-            delay = random.uniform(15, 25) + random.uniform(-0.51, 0.56)
+            # Random delay (5–10 s with jitter)
+            delay = random.uniform(5, 10) + random.uniform(-0.4, 0.4)
             delay = max(0, delay)
             log.info(f"⏳ Waiting {delay:.2f}s before next send...")
             await asyncio.sleep(delay)
 
         except Exception as e:
             log.error(f"❌ Failed to mirror message from {src} → {dest}: {e}")
+
 
 
 
