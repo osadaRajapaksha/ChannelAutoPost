@@ -115,6 +115,7 @@ import asyncio
 import random
 
 
+
 @datgbot.on(events.NewMessage(incoming=True, chats=list(CHANNEL_PAIRS.keys())))
 async def mirror_message(event):
     # Skip messages sent by this bot
@@ -126,55 +127,77 @@ async def mirror_message(event):
     if not dests:
         return
 
-    # Support one→many (space-separated IDs)
+    # Normalize destinations
     if isinstance(dests, str):
         dests = [int(x) for x in dests.split()]
     elif isinstance(dests, int):
         dests = [dests]
 
-    # ✅ Fetch full message to ensure entities (bold, italic, quote, spoiler) are loaded
+    # Fetch the full message object from Telegram to ensure entities are present
     try:
         full_msg = await datgbot.get_messages(src, ids=event.id)
+        # get_messages may return None or a list; ensure single Message object
+        if isinstance(full_msg, (list, tuple)):
+            full_msg = full_msg[0] if full_msg else None
+        if full_msg is None:
+            log.warning(f"Could not fetch full message for id {event.id} from {src}")
+            return
     except Exception as e:
-        log.error(f"Could not fetch full message from {src}: {e}")
+        log.error(f"Error fetching full message id={event.id} from {src}: {e}")
         return
+
+    # Debug: print message + entities so we can inspect what Telegram returned
+    try:
+        ent_info = [(type(x).__name__, getattr(x, 'offset', None), getattr(x, 'length', None))
+                    for x in getattr(full_msg, 'entities', [])]
+        log.debug(f"Full message fetched: id={full_msg.id}, text={repr(full_msg.message)}, entities={ent_info}")
+    except Exception:
+        log.debug("Full message fetched but failed to read entities for debug.")
 
     for dest in dests:
         try:
-            if full_msg.poll:
-                log.info(f"Skipping poll message in {src}")
+            # Skip polls
+            if getattr(full_msg, 'poll', None):
+                log.info(f"Skipping poll message id={full_msg.id} in {src}")
                 continue
 
-            # --- Handle text/media while preserving Telegram formatting ---
-            if full_msg.media:  # photo, video, etc.
+            # If there's media (photo/video/doc/etc.), include caption+entities
+            if getattr(full_msg, 'media', None):
+                caption = full_msg.message or ""  # caption or empty
+                entities = getattr(full_msg, "entities", None)
+                # send_file accepts entities (not formatting_entities) for caption
                 await datgbot.send_file(
                     dest,
                     full_msg.media,
-                    caption=full_msg.message or "",
-                    entities=full_msg.entities,
+                    caption=caption,
+                    entities=entities,
                     link_preview=False
                 )
+
+            # Plain text message
             elif full_msg.message:
+                # Use .message and .entities (these are raw Telegram fields)
                 await datgbot.send_message(
                     dest,
                     full_msg.message,
-                    entities=full_msg.entities,
+                    entities=getattr(full_msg, "entities", None),
                     link_preview=False
                 )
+
             else:
-                log.info(f"Unhandled message type from {src}")
+                log.info(f"Unhandled message type id={full_msg.id} from {src}")
                 continue
 
-            log.info(f"✅ Mirrored message from {src} → {dest}")
+            log.info(f"✅ Mirrored message id={full_msg.id} from {src} → {dest}")
 
-            # Random delay (5–10 s + jitter)
+            # Random 5–10 s delay + small jitter
             delay = random.uniform(5, 10) + random.uniform(-0.4, 0.4)
             delay = max(0, delay)
             log.info(f"⏳ Waiting {delay:.2f}s before next send...")
             await asyncio.sleep(delay)
 
         except Exception as e:
-            log.error(f"❌ Failed to mirror message from {src} → {dest}: {e}")
+            log.error(f"❌ Failed to mirror message id={full_msg.id} from {src} → {dest}: {e}")
 
 
 
